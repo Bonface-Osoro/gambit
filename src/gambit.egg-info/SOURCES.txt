@@ -1,0 +1,9 @@
+LICENSE
+README.md
+setup.py
+src/gambit.egg-info/PKG-INFO
+src/gambit.egg-info/SOURCES.txt
+src/gambit.egg-info/dependency_links.txt
+src/gambit.egg-info/not-zip-safe
+src/gambit.egg-info/requires.txt
+src/gambit.egg-info/top_level.txt

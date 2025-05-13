@@ -1,3 +1,22 @@
+Metadata-Version: 2.1
+Name: gambit
+Version: 0.1.dev1+gfd307b9.d20250513
+Summary: Geospatial Access via Multitechnology Broadband Infrastructure Tool (gambit)
+Home-page: https://github.com/Bonface-Osoro/gambit.git
+Author: Bonface Osoro
+Author-email: bonfaceosoro@gmail.com
+License: MIT License
+Keywords: broadband,satellite,fiber,mobile,Connectivity
+Classifier: Development Status :: 1 - Planning
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Scientific/Engineering :: GIS
+Classifier: Topic :: Utilities
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
 # Geospatial Access via Multitechnology Broadband Infrastructure Tool (gambit)
 This project develops a geospatial, techno-economic integrated model to support universal broadband planning through three complementary systems: mobile (4G/5G), least-cost fixed fiber, and Low Earth Orbit (LEO) satellite networks. The model uses spatial optimization algorithms to design the fixed fiber network, and quantifies and compares the capacity, deployment cost, and carbon emissions of all three technologies across varying population densities. It is designed to help policymakers and stakeholders evaluate trade-offs and develop cost-effective, sustainable broadband strategies for unconnected areas. The model leverages open geospatial data from OpenStreetMap and population datasets, and is built using Python-based tools including OSMnx, GeoPandas, and SciPy for network analysis and spatial optimization:
 
