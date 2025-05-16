@@ -1,13 +1,15 @@
 import configparser
+import fiona
 import json
 import os
 import rasterio
+import shapely
 import geopandas as gpd
+import osmnx as ox
 import pandas as pd
 from rasterio.mask import mask
 from rasterstats import zonal_stats
-from shapely.geometry import Polygon
-from shapely.geometry import MultiPolygon
+from shapely.geometry import MultiPolygon, mapping, shape, MultiLineString
 from tqdm import tqdm
 
 CONFIG = configparser.ConfigParser()
@@ -529,7 +531,8 @@ class ProcessPopulation:
                                 'crs': 'epsg:4326'})
 
                 filename_out = '{}.tif'.format(gid_id) 
-                folder_out = os.path.join('results', 'processed', self.country_iso3, 'population', 'tiffs')
+                folder_out = os.path.join('results', 'processed', 
+                                          self.country_iso3, 'population', 'tiffs')
 
                 if not os.path.exists(folder_out):
 
@@ -623,6 +626,359 @@ class ProcessPopulation:
                 pass
 
         return None
+
+
+class FiberProcess:
+
+    """
+    This class generates lines 
+    connecting central coordinates 
+    of sub-regions.
+    """
+
+    def __init__(self, country_iso3, country_iso2, csv_country):
+        """
+        A class constructor
+
+        Arguments
+        ---------
+        country_iso3 : string
+            Country iso3 to be processed.
+        country_iso2 : string
+            Country iso2 to be processed 
+            (specific for fiber data).
+        csv_country : string
+            Name of the country metadata file.
+        """
+        self.country_iso3 = country_iso3
+        self.country_iso2 = country_iso2
+        self.csv_country = csv_country
+
+
+    def process_existing_fiber(self):
+        """
+        Load and process existing fiber data.
+
+        """
+        iso3 = self.country_iso3
+        iso2 = self.country_iso2.lower()
+
+        folder = os.path.join(DATA_PROCESSED, iso3, 'network_existing')
+
+        if not os.path.exists(folder):
+
+            os.makedirs(folder)
+
+        filename = '{}_core_edges_existing.shp'.format(iso3)
+        path_output = os.path.join(folder, filename)
+
+        if os.path.exists(path_output):
+
+            return print('Existing fiber already processed')
+
+        else:
+
+            path = os.path.join(DATA_RAW, 'existing_fiber', 
+                                'SSA_existing_fiber.shp')
+
+            shape = fiona.open(path)
+
+            data = []
+
+            for item in shape:
+
+                if item['properties']['iso2'] == iso2:
+
+                    if item['geometry']['type'] == 'LineString':
+
+                        data.append({
+                            'type': 'Feature',
+                            'geometry': {
+                                'type': 'LineString',
+                                'coordinates': item['geometry']['coordinates'],
+                            },
+                            'properties': {
+                                'operators': item['properties']['operator'],
+                                'source': 'existing'
+                            }
+                        })
+
+                    if item['geometry']['type'] == 'MultiLineString':
+                            
+                        geom = MultiLineString(item['geometry']['coordinates'])
+
+                        for line in geom.geoms:
+
+                            data.append({
+                                'type': 'Feature',
+                                'geometry': mapping(line),
+                                'properties': {
+                                    'operators': item['properties']['operator'],
+                                    'source': 'existing'
+                                }
+                            })
+
+
+            if len(data) == 0:
+
+                return print('No existing infrastructure')
+
+            data = gpd.GeoDataFrame.from_features(data, crs = 'epsg:4326')
+            data.to_file(path_output)
+
+        return print('Existing fiber processed')
+
+
+    def find_nodes_on_existing_infrastructure(self):
+        """
+        Find those agglomerations which are within a buffered zone of
+        existing fiber links.
+
+        """
+
+        countries = pd.read_csv(self.csv_country, encoding = 'utf-8-sig')
+
+        for idx, country in countries.iterrows():
+
+            if not country['iso3'] == self.country_iso3: 
+
+                continue   
+
+            iso3 = country['iso3']
+
+            folder = os.path.join(DATA_PROCESSED, iso3, 'network_existing')
+            filename = '{}_core_nodes_existing.shp'.format(iso3)
+            path_output = os.path.join(folder, filename)
+
+            if os.path.exists(path_output):
+
+                return print('Already found nodes on existing infrastructure')
+            
+            else:
+
+                if not os.path.dirname(path_output):
+
+                    os.makedirs(os.path.dirname(path_output))
+
+            path = os.path.join(folder, '{}_core_edges_existing.shp').format(iso3)
+
+            if not os.path.exists(path):
+
+                return print('No existing infrastructure')
+
+            existing_infra = gpd.read_file(path, crs='epsg:4326')
+
+            existing_infra = existing_infra.to_crs(epsg=3857)
+            existing_infra['geometry'] = existing_infra['geometry'].buffer(5000)
+            existing_infra = existing_infra.to_crs(epsg=4326)
+
+            path = os.path.join(DATA_PROCESSED, iso3, 'agglomerations', 
+                                'agglomerations.shp').format(iso3)
+            agglomerations = gpd.read_file(path, crs='epsg:4326')
+
+            bool_list = agglomerations.intersects(existing_infra.unary_union)
+
+            agglomerations = pd.concat([agglomerations, bool_list], axis=1)
+
+            agglomerations = agglomerations[agglomerations[0] == 
+                                            True].drop(columns = 0)
+
+            agglomerations['source'] = 'existing'
+
+            agglomerations.to_file(path_output)
+
+
+        return print('Found nodes on existing infrastructure')
+
+
+def download_street_data(iso3):
+
+    """
+    This function download the street data for each country.
+
+    Parameters
+    ----------
+    iso3 : string
+        Country ISO3 code
+    """
+    path = os.path.join(DATA_RAW, 'countries.csv')
+    countries = pd.read_csv(path, encoding = 'utf-8-sig')
+    ssa_countries = countries
+
+    for idx, ssa in ssa_countries.iterrows():
+
+        if not ssa['iso3'] == iso3:
+
+            continue
+        
+        print('Extracting street data for {}'.format(iso3))
+        roads = ox.graph_from_place(format('{}'.format(ssa['country'])))
+
+        print('Converting extracted {} street data to geodataframe'.format(iso3))
+        road_gdf = ox.graph_to_gdfs(roads, nodes = False, edges = True)
+
+        print('Converting extracted {} street geodataframe to csv'.format(iso3))
+        fileout = '{}_national_street_data.csv'.format(iso3)
+        folder_out = os.path.join(DATA_RAW, 'street_data', iso3)
+        if not os.path.exists(folder_out):
+
+            os.makedirs(folder_out)
+
+        path_out = os.path.join(folder_out, fileout)
+        road_gdf.to_csv(path_out, index = False)
+
+
+    return None
+
+
+def generate_street_shapefile(iso3):
+
+    """
+    This function convert the downloaded csv data into shapefile.
+
+    Parameters
+    ----------
+    iso3 : string
+        Country ISO3 code
+    """
+    path = os.path.join(DATA_RAW, 'countries.csv')
+    countries = pd.read_csv(path, encoding = 'utf-8-sig')
+    ssa_countries = countries
+
+    for idx, ssa in ssa_countries.iterrows():
+
+        if not ssa['iso3'] == iso3:
+
+            continue
+        
+        csv_path = os.path.join(DATA_RAW, 'street_data', iso3, 
+                                '{}_national_street_data.csv'.format(iso3))
+        
+        print('Reading CSV street data for {}'.format(iso3))
+        df = pd.read_csv(csv_path)
+        df = df[['highway', 'length', 'geometry']]
+        df['iso3'] = ''
+
+        print('Processing CSV street data for {}'.format(iso3))
+        df['iso3'] = iso3
+        df['geometry'] = df['geometry'].apply(lambda x: shapely.wkt.loads(x))
+        gdf = gpd.GeoDataFrame(data = df, geometry = df['geometry'], crs = 4329)
+
+        filename = '{}_street_data.shp'.format(iso3)
+        folder_out = os.path.join(DATA_RAW, 'street_data', iso3)
+
+        if not os.path.exists(folder_out):
+
+            os.makedirs(folder_out)
+
+        path_out = os.path.join(folder_out, filename)
+        gdf.to_file(path_out)
+
+
+    return None
+
+
+def process_region_street(iso3):
+
+    path = os.path.join(DATA_RAW, 'countries.csv')
+    countries = pd.read_csv(path, encoding='utf-8-sig')
+    if iso3 not in countries["iso3"].values:
+        return None  # Exit early if iso3 not found
+
+    region_path = os.path.join(DATA_PROCESSED, iso3, 'regions', f'regions_2_{iso3}.shp')
+    regions = gpd.read_file(region_path)
+    gid = 'GID_2'
+
+    file_in = os.path.join(DATA_RAW, 'street_data', iso3, f'{iso3}_street_data.shp')
+    gdf_street = gpd.read_file(file_in)
+    gdf_street = gdf_street.set_crs("epsg:4326", allow_override=True)
+
+    for _, region in regions.iterrows():
+        gid_id = region[gid]
+        gdf_region = regions[regions[gid] == gid_id]
+        gdf_region = gdf_region.set_crs(gdf_street.crs)
+
+        print(f'Intersecting {gid_id} street data points')
+        try:
+            gdf_result = gpd.overlay(gdf_street, gdf_region, how='intersection')
+        except Exception as e:
+            print(f"Overlay failed for {gid_id}: {e}")
+            continue
+
+        folder_out = os.path.join(DATA_PROCESSED, iso3, 'streets', 'regions')
+        os.makedirs(folder_out, exist_ok=True)
+        path_out = os.path.join(folder_out, f'{gid_id}.shp')
+        gdf_result.to_file(path_out)
+
+    return None
+
+
+def process_access_street(iso3):
+    """
+    Function to process the street data at sub-regional level.
+
+    Parameters
+    ----------
+    iso3 : string
+        Country ISO3 code
+    """
+
+    # Load countries and verify ISO3 is valid
+    path = os.path.join(DATA_RAW, 'countries.csv')
+    countries = pd.read_csv(path, encoding='utf-8-sig')
+    if iso3 not in countries["iso3"].values:
+        print(f"{iso3} not found in countries.csv")
+        return None
+
+    # Determine region shapefile and GID column
+    region_path_3 = os.path.join(DATA_PROCESSED, iso3, 'regions', 
+                                 f'regions_3_{iso3}.shp')
+    region_path_2 = os.path.join('results', 'processed', iso3, 'regions', 
+                                 f'regions_2_{iso3}.shp')
+
+    if os.path.exists(region_path_3):
+        regions = gpd.read_file(region_path_3)
+        gid = 'GID_3'
+    elif os.path.exists(region_path_2):
+        regions = gpd.read_file(region_path_2)
+        gid = 'GID_2'
+    else:
+        print(f"No valid region shapefile found for {iso3}")
+        return None
+
+    # Read the full street data once
+    file_in = os.path.join(DATA_RAW, 'street_data', iso3, 
+                           f'{iso3}_street_data.shp')
+    if not os.path.exists(file_in):
+        print(f"Street data not found for {iso3}")
+        return None
+
+    gdf_street = gpd.read_file(file_in)
+    gdf_street = gdf_street.set_crs("epsg:4326", allow_override=True)
+
+    # Ensure regions are in the same CRS
+    regions = regions.set_crs(gdf_street.crs, allow_override=True)
+
+    # Process each region
+    for _, region in regions.iterrows():
+        gid_id = region[gid]
+        gdf_region = regions[regions[gid] == gid_id]
+
+        print(f'Intersecting {gid_id} street data points')
+
+        try:
+            gdf_result = gpd.overlay(gdf_street, gdf_region, how='intersection')
+        except Exception as e:
+            print(f"Overlay failed for {gid_id}: {e}")
+            continue
+
+        # Save result
+        folder_out = os.path.join(DATA_PROCESSED, iso3, 'streets', 'sub_regions')
+        os.makedirs(folder_out, exist_ok=True)
+        path_out = os.path.join(folder_out, f'{gid_id}.shp')
+        gdf_result.to_file(path_out)
+
+    return None
 
 
 def population_decile(decile_value):

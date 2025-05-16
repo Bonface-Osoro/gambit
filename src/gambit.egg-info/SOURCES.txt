@@ -1,4 +1,5 @@
 .DS_Store
+.gitignore
 LICENSE
 README.md
 setup.py
@@ -66,6 +67,11 @@ setup.py
 docs/method.png
 docs/satellite_coverage.jpg
 docs/signal_plots.png
+scripts/runner.py
+scripts/script_config.ini
+src/gambit/netPlanning.py
+src/gambit/preprocessing.py
+src/gambit/script_config.ini
 src/gambit.egg-info/PKG-INFO
 src/gambit.egg-info/SOURCES.txt
 src/gambit.egg-info/dependency_links.txt

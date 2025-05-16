@@ -138,6 +138,8 @@ dmypy.json
 vis/*/* 
 cache/*/* 
 data/*/*
+data/*
+!data/raw/
 results/*
 !results/SSA/
 figures/*

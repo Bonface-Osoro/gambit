@@ -4,8 +4,13 @@ import sys
 import warnings
 import pandas as pd
 from gambit.preprocessing import (ProcessCountry, ProcessRegions, 
-                                  ProcessPopulation)
-
+    ProcessPopulation, FiberProcess, download_street_data, 
+    generate_street_shapefile, process_region_street, process_access_street)
+from gambit.netPlanning import (process_regional_settlement_tifs, 
+    generate_regional_settlement_lut, process_access_settlement_tifs, 
+    generate_access_settlement_lut, generate_agglomeration_lut, 
+    find_largest_regional_settlement, get_settlement_routing_paths,
+    create_regions_to_model, create_routing_buffer_zone)
 
 pd.options.mode.chained_assignment = None
 warnings.filterwarnings('ignore')
@@ -28,13 +33,13 @@ if __name__ == '__main__':
 
     for idx, country in countries.iterrows():
             
-        #if not country['regions'] == 'Sub-Saharan Africa':
+        if not country['regions'] == 'Sub-Saharan Africa' or country['iso3'] == 'SLE':
             
-        if not country['iso3'] == 'UGA':
+        #if not country['iso3'] == 'MDG':
             
             continue 
 
-        country = ProcessCountry(path, countries['iso3'].loc[idx])
+        '''country = ProcessCountry(path, countries['iso3'].loc[idx])
         country.process_country_shapes()
 
         regions = ProcessRegions(countries['iso3'].loc[idx], countries['lowest'].loc[idx])
@@ -46,3 +51,24 @@ if __name__ == '__main__':
         populations.process_population_tif()
         populations.process_sub_regional_pop_tiff()
         populations.pop_process_shapefiles()
+
+        process_regional_settlement_tifs(country)
+        generate_regional_settlement_lut(country)
+        process_access_settlement_tifs(country)
+        generate_access_settlement_lut(country)
+
+        generate_agglomeration_lut(country)
+        find_largest_regional_settlement(country)
+        get_settlement_routing_paths(country)
+        create_regions_to_model(country)
+        create_routing_buffer_zone(country)
+        
+        fiber = FiberProcess(countries['iso3'].loc[idx], 
+                                   countries['iso2'].loc[idx], path)
+        #fiber.process_existing_fiber()
+        #fiber.find_nodes_on_existing_infrastructure()'''
+
+        #download_street_data(countries['iso3'].loc[idx])
+        #generate_street_shapefile(countries['iso3'].loc[idx])
+        process_region_street(countries['iso3'].loc[idx])
+        process_access_street(countries['iso3'].loc[idx])
