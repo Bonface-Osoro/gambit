@@ -1077,6 +1077,65 @@ def create_routing_buffer_zone(country):
     return None
 
 
+def create_regional_routing_buffer_zone(country):
+    """
+    A routing buffer is required to reduce the size of the problem.
+
+    To create the routing zone, a minimum spanning tree is fitted
+    between the desired settlements, with a buffer and union consequently
+    being added.
+
+    Parameters
+    ----------
+    country : dict
+        Contains all country-specific information for modeling.
+
+    """
+    iso3 = country['iso3']
+    regional_level = 2
+    GID_level = 'GID_{}'.format(regional_level)
+    print('Creating {} routing buffer zones'.format(iso3))
+
+    folder = os.path.join(DATA_PROCESSED, iso3, 'buffer_routing_zones')
+    folder_nodes = os.path.join(folder, 'regional_nodes')
+
+    if not os.path.exists(folder_nodes):
+
+        os.makedirs(folder_nodes)
+
+    filename = 'regional_settlements.shp'
+    path = os.path.join(DATA_PROCESSED, iso3, 'settlements', filename)
+    settlements = gpd.read_file(path, crs = 'epsg:4326')
+
+    filename = 'modeling_regions.shp'
+    path = os.path.join(DATA_PROCESSED, iso3, 'modeling_regions', filename)
+    modeling_regions = gpd.read_file(path, crs = 'epsg:4326')
+
+    for idx, region in modeling_regions.iterrows():
+
+        modeling_region = gpd.GeoDataFrame.from_features([{
+            'geometry': mapping(region['geometry']),
+            'properties': {
+                'regions': region['regions']
+            }
+        }], crs = 'epsg:4326')
+
+        nodes = gpd.overlay(settlements, modeling_region, how = 'intersection')
+        main_node = (nodes[nodes['population'] == nodes['population'].max()])
+
+        if not len(main_node) > 0:
+
+            continue
+
+        #export nodes
+        path_nodes = os.path.join(folder_nodes, main_node.iloc[0][GID_level] + 
+                                  '.shp')
+        nodes.to_file(path_nodes)
+
+
+    return None
+
+
 def combine_access_nodes(iso3):
     """
     This function combines the shapefiles into a single shapefile.
