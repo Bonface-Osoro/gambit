@@ -10,7 +10,9 @@ from gambit.netPlanning import (process_regional_settlement_tifs,
     generate_regional_settlement_lut, process_access_settlement_tifs, 
     generate_access_settlement_lut, generate_agglomeration_lut, 
     find_largest_regional_settlement, get_settlement_routing_paths,
-    create_regions_to_model, create_routing_buffer_zone)
+    create_regions_to_model, create_routing_buffer_zone, 
+    create_regional_routing_buffer_zone)
+from gambit.optimizer import batch_pcst_parallel
 
 pd.options.mode.chained_assignment = None
 warnings.filterwarnings('ignore')
@@ -33,9 +35,9 @@ if __name__ == '__main__':
 
     for idx, country in countries.iterrows():
             
-        if not country['regions'] == 'Sub-Saharan Africa' or country['iso3'] == 'SLE':
+        #if not country['regions'] == 'Sub-Saharan Africa' or country['iso3'] == 'SLE':
             
-        #if not country['iso3'] == 'MDG':
+        if not country['iso3'] == 'SLE':
             
             continue 
 
@@ -62,13 +64,32 @@ if __name__ == '__main__':
         get_settlement_routing_paths(country)
         create_regions_to_model(country)
         create_routing_buffer_zone(country)
+        create_regional_routing_buffer_zone(country)
+        
         
         fiber = FiberProcess(countries['iso3'].loc[idx], 
                                    countries['iso2'].loc[idx], path)
         #fiber.process_existing_fiber()
         #fiber.find_nodes_on_existing_infrastructure()'''
 
+        ''' This block of code should only be run once to download and process 
+        road data. '''
         #download_street_data(countries['iso3'].loc[idx])
         #generate_street_shapefile(countries['iso3'].loc[idx])
-        process_region_street(countries['iso3'].loc[idx])
-        process_access_street(countries['iso3'].loc[idx])
+        #process_region_street(countries['iso3'].loc[idx])
+        #process_access_street(countries['iso3'].loc[idx])
+
+        # Perform Spatial Optimization
+        batch_pcst_parallel(roads_folder = os.path.join(DATA_PROCESSED, 
+                countries['iso3'].loc[idx], 'streets', 'regions'),
+        population_folder = os.path.join(DATA_PROCESSED, countries['iso3'].loc[idx], 
+                'buffer_routing_zones', 'regional_nodes'),
+        output_folder = os.path.join(DATA_RESULTS, countries['iso3'].loc[idx]),
+        max_workers = None)
+
+        batch_pcst_parallel(roads_folder = os.path.join(DATA_PROCESSED, 
+                countries['iso3'].loc[idx], 'streets', 'sub_regions'),
+        population_folder = os.path.join(DATA_PROCESSED, countries['iso3'].loc[idx], 
+                'buffer_routing_zones', 'nodes'),
+        output_folder = os.path.join(DATA_RESULTS, countries['iso3'].loc[idx]),
+        max_workers = None)
